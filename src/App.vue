@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 
 // ========================================================
-// 数据定义
+// 图片与缓存逻辑 (保持不变)
 // ========================================================
 const total_photos = 15; 
 const raw_photo_urls = []; 
@@ -10,16 +10,11 @@ const cached_photo_urls = ref([]);
 const isLoading = ref(true); 
 const loadProgress = ref(0); 
 
-// 生成原始路径
 for (let i = 1; i <= total_photos; i++) {
     raw_photo_urls.push(`${import.meta.env.BASE_URL}images/${i}.jpg`);
 }
 
-// ========================================================
-// 缓存逻辑 (Cache API) - 保持不变，保证流畅度
-// ========================================================
 const CACHE_NAME = 'azumiao-base-v1'; 
-
 onMounted(async () => {
     try {
         const cache = await caches.open(CACHE_NAME);
@@ -28,41 +23,30 @@ onMounted(async () => {
                 let response = await cache.match(url);
                 if (!response) {
                     response = await fetch(url);
-                    if (response.ok) {
-                        await cache.put(url, response.clone());
-                    }
+                    if (response.ok) await cache.put(url, response.clone());
                 }
                 const blob = await response.blob();
-                const objectUrl = URL.createObjectURL(blob);
-                
-                // 更新进度
-                loadProgress.value = Math.floor((++loadProgress.value / total_photos) * 100); // 简单估算
-                return objectUrl;
-            } catch (err) {
-                console.error(`加载失败: ${url}`, err);
-                return url;
-            }
+                loadProgress.value = Math.floor((++loadProgress.value / total_photos) * 100);
+                return URL.createObjectURL(blob);
+            } catch (err) { return url; }
         });
-
         cached_photo_urls.value = await Promise.all(promises);
-        
         setTimeout(() => { isLoading.value = false; }, 500);
     } catch (e) {
-        console.error("缓存系统初始化失败", e);
         cached_photo_urls.value = raw_photo_urls;
         isLoading.value = false;
     }
 });
 
 const duplicated_photo_list = computed(() => {
-    return [...cached_photo_urls.value, ...cached_photo_urls.value];
+    // 复制 3 份以确保在超宽屏幕上也不会断档
+    return [...cached_photo_urls.value, ...cached_photo_urls.value, ...cached_photo_urls.value];
 });
 </script>
 
 <template>
     <div class="bg">
         
-        <!-- Loading 遮罩 -->
         <transition name="fade">
             <div v-if="isLoading" class="loading-mask">
                 <div class="loader">
@@ -72,41 +56,41 @@ const duplicated_photo_list = computed(() => {
             </div>
         </transition>
 
-        <div class="container" v-show="!isLoading">
+        <!-- 
+           👇 核心修改：
+           移除 v-show，改用 opacity 避免布局跳动。
+           container 负责垂直居中内容。
+        -->
+        <div class="container" :style="{ opacity: isLoading ? 0 : 1 }">
             
             <div class="title-wrapper">
                 <h1 class="page-title">阿祖喵的秘密基地</h1>
                 <p class="subtitle">✨ Welcome to my secret base ✨</p>
             </div>
 
-            <!-- 
-               👇 修复重点：
-               这里的 scroll-container 现在会强制撑满 100vw
-            -->
-
             <!-- 第一行 -->
-            <div class="scroll-container">
+            <div class="scroll-wrapper">
                 <ol class="boxes boxes-forward">
                     <li class="box" v-for="(photo, i) in duplicated_photo_list" :key="'f-'+i">
-                        <img :src="photo" />
+                        <img :src="photo" draggable="false" /> <!-- 禁止图片拖拽，优化点击体验 -->
                     </li>
                 </ol>
             </div>
             
             <!-- 第二行 -->
-            <div class="scroll-container">
+            <div class="scroll-wrapper">
                 <ol class="boxes boxes-backward">
                     <li class="box" v-for="(photo, i) in duplicated_photo_list" :key="'b-'+i">
-                        <img :src="photo" />
+                        <img :src="photo" draggable="false" />
                     </li>
                 </ol>
             </div>
 
             <!-- 第三行 -->
-            <div class="scroll-container">
+            <div class="scroll-wrapper">
                 <ol class="boxes boxes-forward">
                     <li class="box" v-for="(photo, i) in duplicated_photo_list" :key="'f2-'+i">
-                        <img :src="photo" />
+                        <img :src="photo" draggable="false" />
                     </li>
                 </ol>
             </div>
@@ -116,105 +100,86 @@ const duplicated_photo_list = computed(() => {
 
 <style scoped>
 /* ========================================================
-   1. 布局
+   1. 布局与垂直居中
    ======================================================== */
 .bg { 
     position: relative; 
     width: 100%; 
-    min-height: 100dvh; 
-    display: block; 
-    padding-top: 1px; 
-    padding-bottom: 50px; 
-    overflow-x: hidden; /* 仅在最外层防止横向滚动条 */
+    min-height: 100vh; /* 强制占满屏幕高度 */
+    display: flex;     /* 启用 Flex 布局 */
+    justify-content: center; /* 水平居中 */
+    align-items: center;     /* 🚀 垂直居中：解决电脑版往上飘的问题 */
+    overflow-x: hidden;      /* 防止页面出现横向滚动条 */
+    padding-bottom: 20px;
 }
 
 .container { 
-    width: 100%; 
+    width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
-    animation: fadeInPage 1s ease-out;
+    justify-content: center;
+    transition: opacity 0.5s ease;
+    /* 加上一点 z-index 确保在背景之上 */
+    z-index: 10;
 }
-@keyframes fadeInPage { from { opacity: 0; } to { opacity: 1; } }
 
 /* ========================================================
-   2. 🚀 关键修复：滚动容器强制全屏
+   2. 🚀 核心修复：全屏穿透 + 点击暂停
    ======================================================== */
-.scroll-container { 
+.scroll-wrapper { 
     position: relative; 
-    margin-top: 15px; 
     height: 220px; 
+    margin-top: 15px;
     
-    /* 👇 核心修复代码：强制宽度为视口宽度 (100vw) */
+    /* 👇 暴力全屏方案：无视父容器宽度，强制撑满视口 */
     width: 100vw; 
+    left: 50%; 
+    margin-left: -50vw; 
     
-    /* 👇 核心修复代码：无论父容器怎么缩进，我都强制居中并占满屏幕 */
-    margin-left: calc(50% - 50vw);
-    margin-right: calc(50% - 50vw);
-    
-    /* 允许内容在容器内也是全宽 */
-    max-width: 100vw;
-    
-    /* 这里保留 overflow: hidden 是为了不出现横向滚动条，但宽度已经是全屏了 */
-    overflow: hidden; 
+    /* 允许子元素溢出，防止图片被切掉 (消除空气墙) */
+    overflow: visible; 
 }
 
 .boxes { 
     position: absolute; 
     display: flex; 
+    left: 0;
     height: 100%; 
-    animation: scroll linear infinite; 
-    animation-duration: 40s; 
-    gap: 20px; 
-    padding-left: 0; 
     align-items: center;
+    padding-left: 0; 
+    gap: 20px; 
     
-    /* 确保内容足够宽，不会因为宽度不够而“撞墙” */
-    min-width: 100%; 
-    
+    /* 动画设置 */
+    animation: scroll linear infinite; 
+    animation-duration: 60s; /* 稍微调慢一点，看起来更优雅 */
     will-change: transform;
 }
 
-/* ========================================================
-   3. 样式细节 (保持之前的优化)
-   ======================================================== */
-.title-wrapper {
-    text-align: center;
-    margin-top: 60px; 
-    margin-bottom: 30px;
-    z-index: 10;
-    padding: 0 15px;
-    animation: float 3s ease-in-out infinite;
+/* 🚀 交互修复：鼠标悬停 OR 手指按住时，停止动画 */
+.boxes:hover, 
+.boxes:active { 
+    animation-play-state: paused; 
+    z-index: 100; /* 按住时层级提高 */
 }
 
-.page-title {
-    font-family: "Avenir Next", "Muli", sans-serif;
-    font-weight: 900;
-    font-size: 2.8rem;
-    color: #ffffff;
-    text-shadow: 2px 2px 0px rgba(255, 154, 158, 0.8), 4px 4px 0px rgba(250, 208, 196, 0.8), 0px 5px 15px rgba(0, 0, 0, 0.15);
-}
-
-.subtitle {
-    font-family: "Verdana", sans-serif;
-    font-size: 0.9rem;
-    color: #fff;
-    margin-top: 8px;
-    font-weight: bold;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-}
-
-@keyframes float {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-5px); }
-}
-
+/* 动画定义 */
 .boxes-forward { animation-name: scrollForward; }
 .boxes-backward { animation-name: scrollBackward; }
 
-@keyframes scrollForward { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-@keyframes scrollBackward { 0% { transform: translateX(-50%); } 100% { transform: translateX(0); } }
+/* 使用 transform 确保平滑 */
+@keyframes scrollForward { 
+    0% { transform: translate3d(0, 0, 0); } 
+    100% { transform: translate3d(-33.33%, 0, 0); } /* 移动 1/3 (因为复制了3份) */
+}
+@keyframes scrollBackward { 
+    0% { transform: translate3d(-33.33%, 0, 0); } 
+    100% { transform: translate3d(0, 0, 0); } 
+}
 
+/* ========================================================
+   3. 图片与卡片样式
+   ======================================================== */
 .box { 
     list-style: none; 
     position: relative; 
@@ -222,70 +187,119 @@ const duplicated_photo_list = computed(() => {
     height: 200px; 
     flex-shrink: 0; 
     border-radius: 15px; 
-    transition: all 0.5s ease; 
-    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.15); 
-    transform: perspective(100px) rotateY(-8deg); 
-    background: rgba(255, 255, 255, 0.25);
-    backdrop-filter: blur(4px);
-    overflow: hidden; 
-    backface-visibility: hidden;
-    transform-style: preserve-3d; 
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); /* 优化回弹效果 */
+    
+    /* 初始状态：轻微 3D 倾斜 */
+    transform: perspective(500px) rotateY(-15deg) scale(0.9);
+    opacity: 0.85;
+    
+    box-shadow: 5px 5px 15px rgba(0,0,0,0.1);
 }
 
-.box img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.box:hover { z-index: 100; width: 280px; transform: scale(1.1) rotateY(0); box-shadow: 0 15px 30px rgba(0,0,0,0.3); }
+.box img { 
+    width: 100%; 
+    height: 100%; 
+    object-fit: cover; 
+    border-radius: 15px; 
+    display: block;
+    /* 防止手机上长按选中图片 */
+    user-select: none; 
+    pointer-events: none; 
+}
 
-.boxes-backward .box { transform: perspective(100px) rotateY(8deg); }
-.boxes-backward .box:hover { transform: scale(1.1) rotateY(0); }
+/* 选中/悬停状态 */
+.box:hover, .box:active { 
+    opacity: 1; 
+    z-index: 200; 
+    /* 放大并摆正 */
+    transform: perspective(500px) rotateY(0deg) scale(1.15); 
+    box-shadow: 0 15px 35px rgba(0,0,0,0.3); 
+    border: 2px solid rgba(255,255,255,0.8); /* 加个白边框更醒目 */
+}
 
-/* Loading 样式 */
+/* 反向滚动的行，初始角度相反 */
+.boxes-backward .box { transform: perspective(500px) rotateY(15deg) scale(0.9); }
+.boxes-backward .box:hover, .boxes-backward .box:active { transform: perspective(500px) rotateY(0deg) scale(1.15); }
+
+/* ========================================================
+   4. 标题与其他
+   ======================================================== */
+.title-wrapper {
+    text-align: center;
+    margin-bottom: 40px; 
+    padding: 0 15px;
+    animation: float 3s ease-in-out infinite;
+}
+
+.page-title {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-weight: 900;
+    font-size: clamp(2rem, 5vw, 3.5rem); /* 响应式字体大小 */
+    color: #ffffff;
+    text-shadow: 3px 3px 0px #ff9a9e, 6px 6px 0px #fad0c4;
+    margin: 0;
+}
+
+.subtitle {
+    font-family: monospace;
+    font-size: 1rem;
+    color: #fff;
+    margin-top: 10px;
+    font-weight: bold;
+    opacity: 0.9;
+    background: rgba(0,0,0,0.1);
+    padding: 5px 15px;
+    border-radius: 20px;
+    display: inline-block;
+}
+
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+
+/* Loading */
 .loading-mask {
     position: fixed;
     top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(20px);
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(25px);
     z-index: 999;
     display: flex;
     justify-content: center;
     align-items: center;
 }
-.loader { text-align: center; color: white; font-family: sans-serif; }
+.loader { text-align: center; color: white; }
 .spinner {
-    width: 50px; height: 50px;
-    border: 5px solid rgba(255,255,255,0.3);
+    width: 40px; height: 40px;
+    border: 4px solid rgba(255,255,255,0.3);
     border-radius: 50%;
     border-top-color: #fff;
-    animation: spin 1s ease-in-out infinite;
-    margin: 0 auto 20px;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 15px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.5s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
-/* 手机适配 */
+/* ========================================================
+   5. 手机适配微调
+   ======================================================== */
 @media (max-width: 768px) {
-    .page-title { font-size: 2rem; } 
-    .scroll-container { height: 160px; margin-top: 10px; }
+    .scroll-wrapper { height: 160px; margin-top: 10px; }
     .boxes { gap: 10px; }
     .box { width: 130px; height: 130px; }
-    .box:hover { width: 180px; }
+    .box:hover, .box:active { transform: scale(1.1) rotateY(0); width: 160px; }
 }
 </style>
 
 <style>
-/* 全局强制重置 - 依然保留 */
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { width: 100%; min-height: 100%; overflow-x: hidden; margin: 0 !important; padding: 0 !important; }
+/* 全局设置 - 保持不变 */
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { width: 100%; height: 100%; overflow-x: hidden; margin: 0 !important; padding: 0 !important; }
 body {
-    background: linear-gradient(-45deg, #ff7d99, #ffc766, #5cb6ff, #ff6363);
-    background-size: 300% 300%;
+    background: linear-gradient(-45deg, #ff9a9e, #fad0c4, #fad0c4, #a18cd1);
+    background-size: 400% 400%;
     animation: globalGradient 15s ease infinite;
     font-family: sans-serif;
 }
-@keyframes globalGradient { 
-    0% { background-position: 0% 0%; } 
-    50% { background-position: 100% 100%; } 
-    100% { background-position: 0% 0%; } 
-}
-#app { width: 100%; min-height: 100vh; overflow-x: hidden; }
+@keyframes globalGradient { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+#app { width: 100%; min-height: 100vh; }
 </style>
