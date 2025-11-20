@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 
 // ========================================================
-// 1. 图片与缓存逻辑 (保持不变，性能最好)
+// 图片与缓存逻辑 (保持不变)
 // ========================================================
 const total_photos = 15; 
 const raw_photo_urls = []; 
@@ -39,7 +39,6 @@ onMounted(async () => {
 });
 
 const duplicated_photo_list = computed(() => {
-    // 复制 3 份以确保在超宽屏幕上也不会断档
     return [...cached_photo_urls.value, ...cached_photo_urls.value, ...cached_photo_urls.value];
 });
 </script>
@@ -56,9 +55,6 @@ const duplicated_photo_list = computed(() => {
             </div>
         </transition>
 
-        <!-- 
-           container 负责垂直居中内容
-        -->
         <div class="container" v-show="!isLoading">
             
             <div class="title-wrapper">
@@ -103,11 +99,11 @@ const duplicated_photo_list = computed(() => {
 .bg { 
     position: relative; 
     width: 100%; 
-    min-height: 100vh; /* 强制占满屏幕高度 */
-    display: flex;     /* 启用 Flex 布局 */
-    justify-content: center; /* 水平居中 */
-    align-items: center;     /* 🚀 垂直居中：内容不再往上飘 */
-    overflow-x: hidden;      /* 防止页面出现横向滚动条 */
+    min-height: 100vh; 
+    display: flex;     
+    justify-content: center; 
+    align-items: center;     
+    overflow-x: hidden;      
     padding-bottom: 20px;
 }
 
@@ -121,18 +117,15 @@ const duplicated_photo_list = computed(() => {
 }
 
 /* ========================================================
-   2. 滚动容器 (保持全屏穿透修复)
+   2. 滚动容器
    ======================================================== */
 .scroll-wrapper { 
     position: relative; 
     height: 220px; 
     margin-top: 20px;
-    
-    /* 👇 暴力全屏方案：无视父容器宽度，强制撑满视口 */
     width: 100vw; 
     left: 50%; 
     margin-left: -50vw; 
-    
     overflow: visible; 
 }
 
@@ -146,17 +139,32 @@ const duplicated_photo_list = computed(() => {
     gap: 20px; 
     animation: scroll linear infinite; 
     animation-duration: 60s; 
-    will-change: transform;
+    /* 🚀 性能优化：防止卡顿 */
+    will-change: transform; 
+    transform: translate3d(0, 0, 0);
 }
 
-/* 鼠标悬停/按住时暂停 */
-.boxes:hover, 
-.boxes:active { 
-    animation-play-state: paused; 
-    z-index: 100; 
+/* 
+   ⚠️ 关键修复：解决手机点击后卡住不动的问题
+   只在“支持悬停”的设备（电脑）上，才允许 hover 暂停。
+   手机上 hover 会粘住，所以手机上禁用 hover 暂停。
+*/
+@media (hover: hover) {
+    .boxes:hover {
+        animation-play-state: paused;
+        z-index: 100;
+    }
 }
 
-/* 动画定义 */
+/* 
+   📱 手机端逻辑：只有“按住”(active) 的时候才暂停
+   手指离开瞬间，active 失效，动画自动恢复
+*/
+.boxes:active {
+    animation-play-state: paused;
+    z-index: 100;
+}
+
 .boxes-forward { animation-name: scrollForward; }
 .boxes-backward { animation-name: scrollBackward; }
 
@@ -170,7 +178,7 @@ const duplicated_photo_list = computed(() => {
 }
 
 /* ========================================================
-   3. 图片卡片 - ⚠️ 已完全恢复原本的倾斜设计
+   3. 图片卡片 (恢复强烈倾斜设计)
    ======================================================== */
 .box { 
     list-style: none; 
@@ -181,11 +189,13 @@ const duplicated_photo_list = computed(() => {
     border-radius: 15px; 
     transition: all 0.5s ease; 
     
-    /* 👇 恢复原本的强烈透视感 */
     opacity: 0.8; 
     transform: perspective(100px) rotateY(-15deg); 
     
     box-shadow: 0 0px 5px rgba(0, 0, 0, 0.5); 
+    
+    /* 防止触摸时产生高亮背景块 */
+    -webkit-tap-highlight-color: transparent;
 }
 
 .box img { 
@@ -199,28 +209,41 @@ const duplicated_photo_list = computed(() => {
     pointer-events: none; 
 }
 
-/* 
-   悬停/点击状态 
-   恢复原本逻辑：hover 时变大、变正、置顶
-*/
-.box:hover, .box:active { 
+/* 电脑 Hover 效果 */
+@media (hover: hover) {
+    .box:hover { 
+        opacity: 1; 
+        z-index: 200; 
+        width: 300px; 
+        transition: all 0.5s ease; 
+        transform: scale(1.1) rotateY(0deg); 
+        box-shadow: 0 15px 35px rgba(0,0,0,0.3); 
+    }
+}
+
+/* 手机 Active (按住) 效果 */
+.box:active { 
     opacity: 1; 
     z-index: 200; 
-    width: 300px; /* 原本的宽度变化 */
-    transition: all 0.5s ease; 
-    transform: scale(1.1) rotateY(0deg); /* 必须重置旋转，否则是歪的 */
+    /* 手机上不要改变宽度！改变宽度会导致排版重算，引起动画闪烁 */
+    /* width: 300px;  <-- 手机上删掉这行 */
+    transition: all 0.3s ease; 
+    transform: scale(1.2) rotateY(0deg); /* 手机上只放大，不推挤 */
     box-shadow: 0 15px 35px rgba(0,0,0,0.3); 
 }
 
-/* 
-   反向滚动行的倾斜方向 
-   ⚠️ 恢复原本设计 
-*/
+/* 反向滚动行的倾斜 */
 .boxes-backward .box { 
     transform: perspective(100px) rotateY(15deg); 
 }
-.boxes-backward .box:hover, .boxes-backward .box:active { 
-    transform: scale(1.1) rotateY(0deg); 
+
+@media (hover: hover) {
+    .boxes-backward .box:hover { 
+        transform: scale(1.1) rotateY(0deg); 
+    }
+}
+.boxes-backward .box:active { 
+    transform: scale(1.2) rotateY(0deg); 
 }
 
 /* ========================================================
@@ -282,26 +305,18 @@ const duplicated_photo_list = computed(() => {
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
 /* ========================================================
-   5. 手机适配 (恢复你原来的参数)
+   5. 手机适配
    ======================================================== */
 @media (max-width: 768px) {
     .scroll-wrapper { height: 160px; margin-top: 10px; }
     .boxes { gap: 10px; }
-    .box { width: 120px; height: 120px; } /* 恢复原本大小 */
-    
-    /* 手机上 hover 的效果 */
-    .box:hover, .box:active { 
-        width: 200px; 
-        transform: scale(1.05) rotateY(0); 
-    }
-    .boxes-backward .box:hover, .boxes-backward .box:active { 
-        transform: scale(1.05) rotateY(0); 
-    }
+    .box { width: 120px; height: 120px; }
+    /* 手机上无需额外的 hover 样式，完全交给 active 处理 */
 }
 </style>
 
 <style>
-/* 全局设置 - 保持不变 */
+/* 全局设置 */
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body { width: 100%; height: 100%; overflow-x: hidden; margin: 0 !important; padding: 0 !important; }
 body {
