@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 
 // ========================================================
-// 图片逻辑保持不变
+// 图片逻辑 (完全保留)
 // ========================================================
 const photo_filenames = [];
 const total_photos = 15; 
@@ -19,12 +19,14 @@ const duplicated_photo_list = computed(() => {
 </script>
 
 <template>
+    <!-- 
+      ⚠️ 移除了 .bg 上的 flex 居中，改为内部 padding 控制
+      这样内容多的时候自然向下延伸，不会被切掉或留白 
+    -->
     <div class="bg">
         <div class="container">
             
-            <!-- ========================================================
-                 👇 标题部分：已美化
-            ======================================================== -->
+            <!-- 标题部分 -->
             <div class="title-wrapper">
                 <h1 class="page-title">阿祖喵的秘密基地</h1>
                 <p class="subtitle">✨ Welcome to my secret base ✨</p>
@@ -62,22 +64,19 @@ const duplicated_photo_list = computed(() => {
 
 <style scoped>
 /* ========================================================
-   组件内样式
+   组件样式
    ======================================================== */
+
 .bg { 
     position: relative; 
     width: 100%; 
-    min-height: 100vh; /* 保证占满全屏高度 */
-    background-color: #FFF; 
-    z-index: 0; 
-    /* 背景颜色保持不变 */
-    background: linear-gradient(-45deg, #ff7d996e, #ffc766, #5cb6ff, #ff6363); 
-    background-size: 300% 300%; 
-    animation: gradient 15s ease infinite; 
-    display: flex; 
-    justify-content: center; 
-    align-items: center; 
-    overflow: hidden; /* 防止内容溢出产生滚动条 */
+    /* ⚠️ 关键修改：改用 100dvh 适应手机动态地址栏，如果没有内容也至少撑满屏幕 */
+    min-height: 100dvh; 
+    /* 移除 flex center，避免长内容布局 bug */
+    display: block; 
+    padding-top: 1px; /* 防止 margin 塌陷 */
+    padding-bottom: 50px; /* 底部留点空间 */
+    overflow-x: hidden;
 }
 
 .container { 
@@ -85,146 +84,149 @@ const duplicated_photo_list = computed(() => {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
 }
 
-/* --- 👇 标题美化样式 --- */
+/* --- 标题样式 --- */
 .title-wrapper {
     text-align: center;
-    margin-bottom: 20px; /* 给图片腾出点空间 */
-    margin-top: 40px;
+    margin-top: 60px; /* 顶部距离 */
+    margin-bottom: 30px;
     z-index: 10;
-    animation: float 3s ease-in-out infinite; /* 让标题轻微浮动，增加活力 */
+    padding: 0 15px;
+    animation: float 3s ease-in-out infinite;
 }
 
 .page-title {
-    /* 使用更粗更圆润的字体 */
-    font-family: "Avenir Next", "Muli", "Nunito", "Heiti SC", "MicroSoft Yahei", sans-serif;
+    font-family: "Avenir Next", "Muli", "Nunito", sans-serif;
     font-weight: 900;
     font-size: 2.8rem;
     color: #ffffff;
     letter-spacing: 2px;
     margin: 0;
-    
-    /* ✨ 关键美化：文字阴影，营造层次感 ✨ */
+    line-height: 1.2;
+    /* 文字阴影 */
     text-shadow: 
-        2px 2px 0px rgba(255, 154, 158, 0.8), /* 粉色投影 */
-        4px 4px 0px rgba(250, 208, 196, 0.8), /* 浅橙色投影 */
-        0px 10px 20px rgba(0, 0, 0, 0.15);    /* 柔和的黑色弥散阴影 */
+        2px 2px 0px rgba(255, 154, 158, 0.8), 
+        4px 4px 0px rgba(250, 208, 196, 0.8), 
+        0px 5px 15px rgba(0, 0, 0, 0.15);
 }
 
 .subtitle {
     font-family: "Verdana", sans-serif;
     font-size: 0.9rem;
     color: #fff;
-    margin-top: 5px;
-    opacity: 0.9;
+    margin-top: 8px;
+    opacity: 0.95;
     font-weight: bold;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
     letter-spacing: 1px;
 }
 
-/* 简单的上下浮动动画 */
 @keyframes float {
-    0% { transform: translateY(0px); }
-    50% { transform: translateY(-10px); }
-    100% { transform: translateY(0px); }
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-5px); }
 }
 
-/* 背景动画 */
-@keyframes gradient { 0% { background-position: 0% 0%; } 50% { background-position: 100% 100%; } 100% { background-position: 0% 0%; } }
+/* --- 滚动容器修复 --- */
+.scroll-container { 
+    position: relative; 
+    margin-top: 15px; 
+    /* ⚠️ 关键修改：原来是 100vw，改为 100% 防止把屏幕撑宽 */
+    width: 100%; 
+    height: 220px; 
+    overflow: hidden; /* 确保图片不溢出容器 */
+}
 
-/* 滚动容器 */
-.scroll-container { position: relative; margin-top: 10px; width: 100vw; height: 220px; }
-
-/* 滚动轨道 */
 .boxes { 
     position: absolute; 
     display: flex; 
     height: 100%; 
+    /* 动画逻辑 */
     animation: scroll linear infinite; 
-    animation-duration: 40s; /* 稍微调快一点点速度 */
-    gap: 20px ; 
-    margin-top: 40px; 
+    animation-duration: 40s; 
+    gap: 20px; 
     padding-left: 0; 
-    padding-top: 20px;
-    padding-bottom: 20px;
+    align-items: center; /* 垂直居中图片 */
 }
 
 .boxes-forward { animation-name: scrollForward; }
 .boxes-backward { animation-name: scrollBackward; }
 
+/* 滚动动画：确保无缝衔接 */
 @keyframes scrollForward { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
 @keyframes scrollBackward { 0% { transform: translateX(-50%); } 100% { transform: translateX(0); } }
 
-/* 图片卡片样式 */
+/* 图片卡片 */
 .box { 
     list-style: none; 
     position: relative; 
     width: 200px; 
     height: 200px; 
     flex-shrink: 0; 
-    margin-right: 5px; 
-    border: none; 
     border-radius: 15px; 
     transition: all 0.5s ease; 
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2); /* 加深阴影让图片更立体 */
-    opacity: 0.9; 
-    transform: perspective(100px) rotateY(-10deg); 
-    background: rgba(255, 255, 255, 0.3); /* 给图片加个淡淡的白底背景框 */
-    backdrop-filter: blur(5px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.15); 
+    transform: perspective(100px) rotateY(-8deg); 
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(4px);
+    overflow: hidden; /* 修复图片圆角溢出 */
 }
-.box img { width: 100%; height: 100%; object-fit: cover; object-position: center; border-radius: 15px; transition: all 0.8s ease; }
-.box:hover { opacity: 1; z-index: 1; width: 300px; transition: all 0.5s ease; transform: scale(1.1) rotateY(0); box-shadow: 0 15px 30px rgba(0,0,0,0.3); }
+.box img { width: 100%; height: 100%; object-fit: cover; border-radius: 15px; }
+.box:hover { z-index: 10; width: 280px; transform: scale(1.1) rotateY(0); box-shadow: 0 15px 30px rgba(0,0,0,0.25); }
 
-.boxes:hover { animation-play-state: paused; }
-
-.boxes-backward .box { transform: perspective(100px) rotateY(10deg); }
+.boxes-backward .box { transform: perspective(100px) rotateY(8deg); }
 .boxes-backward .box:hover { transform: scale(1.1) rotateY(0); }
 
-/* --- 平板样式 --- */
-@media (min-width: 769px) and (max-width: 1024px) {
-    .scroll-container { height: 200px; margin-top: 15px; }
-    .boxes { margin-top: 30px; gap: 15px; }
-    .box { width: 160px; height: 160px; }
-    .box:hover { width: 240px; }
-}
-
-/* --- 手机样式 --- */
+/* --- 手机适配 --- */
 @media (max-width: 768px) {
-    .container { padding-top: 20px; }
-    /* 手机上字体稍微调小一点，但依然要大 */
     .page-title { font-size: 2rem; } 
-    .subtitle { font-size: 0.8rem; }
-    
-    .scroll-container { height: 160px; margin-top: 5px; }
-    .boxes { margin-top: 10px; gap: 10px; }
+    .scroll-container { height: 160px; margin-top: 10px; }
+    .boxes { gap: 10px; }
     .box { width: 130px; height: 130px; }
-    .box:hover { width: 200px; transform: scale(1.05) rotateY(0); }
-    .boxes-backward .box:hover { transform: scale(1.05) rotateY(0); }
-}
-
-/* --- 电脑端样式优化 --- */
-@media (min-width: 1025px) {
-    .container { width: 100%; margin: 0 auto; }
-    .scroll-container { width: 100%; }
+    .box:hover { width: 180px; }
 }
 </style>
 
 <!-- ========================================================
-     ⚠️ 关键修改：全局样式（去除白边）
-     注意：这里没有 scoped，这是为了覆盖 body 默认的 margin
+     ⚠️ 关键修改：全局强制样式 (Global Reset)
+     把背景色移到 body 上，彻底解决白边问题
 ======================================================== -->
 <style>
-body, html {
+/* 1. 重置所有盒模型，防止 padding 撑破宽度 */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+/* 2. 设置 html/body 为 100% 并禁止横向滚动 */
+html, body {
+    width: 100%;
+    min-height: 100%;
+    overflow-x: hidden; /* 禁止左右滑动 */
     margin: 0 !important;
     padding: 0 !important;
-    width: 100%;
-    height: 100%;
-    overflow-x: hidden; /* 只需要防止横向滚动 */
 }
+
+/* 3. ⚠️ 把渐变背景加在 Body 上！这样就算内容不满，也是彩色的 */
+body {
+    background: linear-gradient(-45deg, #ff7d99, #ffc766, #5cb6ff, #ff6363);
+    background-size: 300% 300%;
+    animation: globalGradient 15s ease infinite;
+    font-family: sans-serif;
+}
+
+/* 定义全局背景动画 */
+@keyframes globalGradient { 
+    0% { background-position: 0% 0%; } 
+    50% { background-position: 100% 100%; } 
+    100% { background-position: 0% 0%; } 
+}
+
+/* 4. 确保 Vue 根节点也占满 */
 #app {
     width: 100%;
-    height: 100%;
+    min-height: 100vh;
+    overflow-x: hidden;
 }
 </style>
