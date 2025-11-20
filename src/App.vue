@@ -1,42 +1,94 @@
 <script setup>
-import { computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 
 // ========================================================
-// 图片逻辑 (完全保留)
+// 数据定义
 // ========================================================
-const photo_filenames = [];
 const total_photos = 15; 
+const raw_photo_urls = []; 
+const cached_photo_urls = ref([]); 
+const isLoading = ref(true); 
+const loadProgress = ref(0); 
 
+// 生成原始路径
 for (let i = 1; i <= total_photos; i++) {
-    photo_filenames.push(`${i}.jpg`);
+    raw_photo_urls.push(`${import.meta.env.BASE_URL}images/${i}.jpg`);
 }
 
-const photo_list = photo_filenames.map(name => `${import.meta.env.BASE_URL}images/${name}`);
+// ========================================================
+// 缓存逻辑 (Cache API) - 保持不变，保证流畅度
+// ========================================================
+const CACHE_NAME = 'azumiao-base-v1'; 
+
+onMounted(async () => {
+    try {
+        const cache = await caches.open(CACHE_NAME);
+        const promises = raw_photo_urls.map(async (url) => {
+            try {
+                let response = await cache.match(url);
+                if (!response) {
+                    response = await fetch(url);
+                    if (response.ok) {
+                        await cache.put(url, response.clone());
+                    }
+                }
+                const blob = await response.blob();
+                const objectUrl = URL.createObjectURL(blob);
+                
+                // 更新进度
+                loadProgress.value = Math.floor((++loadProgress.value / total_photos) * 100); // 简单估算
+                return objectUrl;
+            } catch (err) {
+                console.error(`加载失败: ${url}`, err);
+                return url;
+            }
+        });
+
+        cached_photo_urls.value = await Promise.all(promises);
+        
+        setTimeout(() => { isLoading.value = false; }, 500);
+    } catch (e) {
+        console.error("缓存系统初始化失败", e);
+        cached_photo_urls.value = raw_photo_urls;
+        isLoading.value = false;
+    }
+});
 
 const duplicated_photo_list = computed(() => {
-    return [...photo_list, ...photo_list];
+    return [...cached_photo_urls.value, ...cached_photo_urls.value];
 });
 </script>
 
 <template>
-    <!-- 
-      ⚠️ 移除了 .bg 上的 flex 居中，改为内部 padding 控制
-      这样内容多的时候自然向下延伸，不会被切掉或留白 
-    -->
     <div class="bg">
-        <div class="container">
+        
+        <!-- Loading 遮罩 -->
+        <transition name="fade">
+            <div v-if="isLoading" class="loading-mask">
+                <div class="loader">
+                    <div class="spinner"></div>
+                    <p>秘密基地资源装载中...</p>
+                </div>
+            </div>
+        </transition>
+
+        <div class="container" v-show="!isLoading">
             
-            <!-- 标题部分 -->
             <div class="title-wrapper">
                 <h1 class="page-title">阿祖喵的秘密基地</h1>
                 <p class="subtitle">✨ Welcome to my secret base ✨</p>
             </div>
 
+            <!-- 
+               👇 修复重点：
+               这里的 scroll-container 现在会强制撑满 100vw
+            -->
+
             <!-- 第一行 -->
             <div class="scroll-container">
                 <ol class="boxes boxes-forward">
-                    <li class="box" v-for="(photo, i) in duplicated_photo_list" :key="'forward-'+i">
-                        <img :src="photo" loading="lazy" />
+                    <li class="box" v-for="(photo, i) in duplicated_photo_list" :key="'f-'+i">
+                        <img :src="photo" />
                     </li>
                 </ol>
             </div>
@@ -44,8 +96,8 @@ const duplicated_photo_list = computed(() => {
             <!-- 第二行 -->
             <div class="scroll-container">
                 <ol class="boxes boxes-backward">
-                    <li class="box" v-for="(photo, i) in duplicated_photo_list" :key="'backward-'+i">
-                        <img :src="photo" loading="lazy" />
+                    <li class="box" v-for="(photo, i) in duplicated_photo_list" :key="'b-'+i">
+                        <img :src="photo" />
                     </li>
                 </ol>
             </div>
@@ -53,8 +105,8 @@ const duplicated_photo_list = computed(() => {
             <!-- 第三行 -->
             <div class="scroll-container">
                 <ol class="boxes boxes-forward">
-                    <li class="box" v-for="(photo, i) in duplicated_photo_list" :key="'forward-2-'+i">
-                        <img :src="photo" loading="lazy" />
+                    <li class="box" v-for="(photo, i) in duplicated_photo_list" :key="'f2-'+i">
+                        <img :src="photo" />
                     </li>
                 </ol>
             </div>
@@ -64,19 +116,16 @@ const duplicated_photo_list = computed(() => {
 
 <style scoped>
 /* ========================================================
-   组件样式
+   1. 布局
    ======================================================== */
-
 .bg { 
     position: relative; 
     width: 100%; 
-    /* ⚠️ 关键修改：改用 100dvh 适应手机动态地址栏，如果没有内容也至少撑满屏幕 */
     min-height: 100dvh; 
-    /* 移除 flex center，避免长内容布局 bug */
     display: block; 
-    padding-top: 1px; /* 防止 margin 塌陷 */
-    padding-bottom: 50px; /* 底部留点空间 */
-    overflow-x: hidden;
+    padding-top: 1px; 
+    padding-bottom: 50px; 
+    overflow-x: hidden; /* 仅在最外层防止横向滚动条 */
 }
 
 .container { 
@@ -84,12 +133,54 @@ const duplicated_photo_list = computed(() => {
     display: flex;
     flex-direction: column;
     align-items: center;
+    animation: fadeInPage 1s ease-out;
+}
+@keyframes fadeInPage { from { opacity: 0; } to { opacity: 1; } }
+
+/* ========================================================
+   2. 🚀 关键修复：滚动容器强制全屏
+   ======================================================== */
+.scroll-container { 
+    position: relative; 
+    margin-top: 15px; 
+    height: 220px; 
+    
+    /* 👇 核心修复代码：强制宽度为视口宽度 (100vw) */
+    width: 100vw; 
+    
+    /* 👇 核心修复代码：无论父容器怎么缩进，我都强制居中并占满屏幕 */
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+    
+    /* 允许内容在容器内也是全宽 */
+    max-width: 100vw;
+    
+    /* 这里保留 overflow: hidden 是为了不出现横向滚动条，但宽度已经是全屏了 */
+    overflow: hidden; 
 }
 
-/* --- 标题样式 --- */
+.boxes { 
+    position: absolute; 
+    display: flex; 
+    height: 100%; 
+    animation: scroll linear infinite; 
+    animation-duration: 40s; 
+    gap: 20px; 
+    padding-left: 0; 
+    align-items: center;
+    
+    /* 确保内容足够宽，不会因为宽度不够而“撞墙” */
+    min-width: 100%; 
+    
+    will-change: transform;
+}
+
+/* ========================================================
+   3. 样式细节 (保持之前的优化)
+   ======================================================== */
 .title-wrapper {
     text-align: center;
-    margin-top: 60px; /* 顶部距离 */
+    margin-top: 60px; 
     margin-bottom: 30px;
     z-index: 10;
     padding: 0 15px;
@@ -97,18 +188,11 @@ const duplicated_photo_list = computed(() => {
 }
 
 .page-title {
-    font-family: "Avenir Next", "Muli", "Nunito", sans-serif;
+    font-family: "Avenir Next", "Muli", sans-serif;
     font-weight: 900;
     font-size: 2.8rem;
     color: #ffffff;
-    letter-spacing: 2px;
-    margin: 0;
-    line-height: 1.2;
-    /* 文字阴影 */
-    text-shadow: 
-        2px 2px 0px rgba(255, 154, 158, 0.8), 
-        4px 4px 0px rgba(250, 208, 196, 0.8), 
-        0px 5px 15px rgba(0, 0, 0, 0.15);
+    text-shadow: 2px 2px 0px rgba(255, 154, 158, 0.8), 4px 4px 0px rgba(250, 208, 196, 0.8), 0px 5px 15px rgba(0, 0, 0, 0.15);
 }
 
 .subtitle {
@@ -116,10 +200,8 @@ const duplicated_photo_list = computed(() => {
     font-size: 0.9rem;
     color: #fff;
     margin-top: 8px;
-    opacity: 0.95;
     font-weight: bold;
     text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-    letter-spacing: 1px;
 }
 
 @keyframes float {
@@ -127,36 +209,12 @@ const duplicated_photo_list = computed(() => {
     50% { transform: translateY(-5px); }
 }
 
-/* --- 滚动容器修复 --- */
-.scroll-container { 
-    position: relative; 
-    margin-top: 15px; 
-    /* ⚠️ 关键修改：原来是 100vw，改为 100% 防止把屏幕撑宽 */
-    width: 100%; 
-    height: 220px; 
-    overflow: hidden; /* 确保图片不溢出容器 */
-}
-
-.boxes { 
-    position: absolute; 
-    display: flex; 
-    height: 100%; 
-    /* 动画逻辑 */
-    animation: scroll linear infinite; 
-    animation-duration: 40s; 
-    gap: 20px; 
-    padding-left: 0; 
-    align-items: center; /* 垂直居中图片 */
-}
-
 .boxes-forward { animation-name: scrollForward; }
 .boxes-backward { animation-name: scrollBackward; }
 
-/* 滚动动画：确保无缝衔接 */
 @keyframes scrollForward { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
 @keyframes scrollBackward { 0% { transform: translateX(-50%); } 100% { transform: translateX(0); } }
 
-/* 图片卡片 */
 .box { 
     list-style: none; 
     position: relative; 
@@ -169,15 +227,42 @@ const duplicated_photo_list = computed(() => {
     transform: perspective(100px) rotateY(-8deg); 
     background: rgba(255, 255, 255, 0.25);
     backdrop-filter: blur(4px);
-    overflow: hidden; /* 修复图片圆角溢出 */
+    overflow: hidden; 
+    backface-visibility: hidden;
+    transform-style: preserve-3d; 
 }
-.box img { width: 100%; height: 100%; object-fit: cover; border-radius: 15px; }
-.box:hover { z-index: 10; width: 280px; transform: scale(1.1) rotateY(0); box-shadow: 0 15px 30px rgba(0,0,0,0.25); }
+
+.box img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.box:hover { z-index: 100; width: 280px; transform: scale(1.1) rotateY(0); box-shadow: 0 15px 30px rgba(0,0,0,0.3); }
 
 .boxes-backward .box { transform: perspective(100px) rotateY(8deg); }
 .boxes-backward .box:hover { transform: scale(1.1) rotateY(0); }
 
-/* --- 手机适配 --- */
+/* Loading 样式 */
+.loading-mask {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(20px);
+    z-index: 999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.loader { text-align: center; color: white; font-family: sans-serif; }
+.spinner {
+    width: 50px; height: 50px;
+    border: 5px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+    margin: 0 auto 20px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.fade-enter-active, .fade-leave-active { transition: opacity 0.5s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+/* 手机适配 */
 @media (max-width: 768px) {
     .page-title { font-size: 2rem; } 
     .scroll-container { height: 160px; margin-top: 10px; }
@@ -187,46 +272,20 @@ const duplicated_photo_list = computed(() => {
 }
 </style>
 
-<!-- ========================================================
-     ⚠️ 关键修改：全局强制样式 (Global Reset)
-     把背景色移到 body 上，彻底解决白边问题
-======================================================== -->
 <style>
-/* 1. 重置所有盒模型，防止 padding 撑破宽度 */
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
-
-/* 2. 设置 html/body 为 100% 并禁止横向滚动 */
-html, body {
-    width: 100%;
-    min-height: 100%;
-    overflow-x: hidden; /* 禁止左右滑动 */
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-/* 3. ⚠️ 把渐变背景加在 Body 上！这样就算内容不满，也是彩色的 */
+/* 全局强制重置 - 依然保留 */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; min-height: 100%; overflow-x: hidden; margin: 0 !important; padding: 0 !important; }
 body {
     background: linear-gradient(-45deg, #ff7d99, #ffc766, #5cb6ff, #ff6363);
     background-size: 300% 300%;
     animation: globalGradient 15s ease infinite;
     font-family: sans-serif;
 }
-
-/* 定义全局背景动画 */
 @keyframes globalGradient { 
     0% { background-position: 0% 0%; } 
     50% { background-position: 100% 100%; } 
     100% { background-position: 0% 0%; } 
 }
-
-/* 4. 确保 Vue 根节点也占满 */
-#app {
-    width: 100%;
-    min-height: 100vh;
-    overflow-x: hidden;
-}
+#app { width: 100%; min-height: 100vh; overflow-x: hidden; }
 </style>
