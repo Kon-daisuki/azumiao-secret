@@ -1,6 +1,9 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 
+// ========================================================
+// 1. 图片逻辑保持不变
+// ========================================================
 const photo_filenames = [];
 const total_photos = 15; 
 
@@ -9,32 +12,25 @@ for (let i = 1; i <= total_photos; i++) {
 }
 
 const photo_list = photo_filenames.map(name => `${import.meta.env.BASE_URL}images/${name}`);
-const duplicated_photo_list = computed(() => [...photo_list, ...photo_list, ...photo_list, ...photo_list]);
 
-// ==========================================
-// 👇 只加了这个 JS 逻辑来修复手机点击没反应的问题
-// ==========================================
-const activeIndex = ref(null);
-
-function toggleExpand(id) {
-    // 如果点击的是同一个，就关闭；否则就打开新的
-    activeIndex.value = (activeIndex.value === id) ? null : id;
-}
+const duplicated_photo_list = computed(() => {
+    return [...photo_list, ...photo_list];
+});
 </script>
 
 <template>
-    <!-- 点击背景关闭放大 -->
-    <div class="bg" @click.self="activeIndex = null">
+    <div class="bg">
         <div class="container">
+            
+            <!-- ========================================================
+                 👇 新增：标题部分
+            ======================================================== -->
+            <h1 class="page-title">阿祖喵的秘密基地</h1>
+
             <!-- 第一行 -->
             <div class="scroll-container">
-                <!-- 这里的 class="paused" 是为了点击时停止滚动，方便看图 -->
-                <ol class="boxes boxes-forward" :class="{ paused: activeIndex !== null }">
-                    <li class="box" 
-                        v-for="(photo, i) in duplicated_photo_list" 
-                        :key="'f-'+i"
-                        :class="{ active: activeIndex === 'f-'+i }"
-                        @click="toggleExpand('f-'+i)">
+                <ol class="boxes boxes-forward">
+                    <li class="box" v-for="(photo, i) in duplicated_photo_list" :key="'forward-'+i">
                         <img :src="photo" loading="lazy" />
                     </li>
                 </ol>
@@ -42,12 +38,8 @@ function toggleExpand(id) {
             
             <!-- 第二行 -->
             <div class="scroll-container">
-                <ol class="boxes boxes-backward" :class="{ paused: activeIndex !== null }">
-                    <li class="box" 
-                        v-for="(photo, i) in duplicated_photo_list" 
-                        :key="'b-'+i"
-                        :class="{ active: activeIndex === 'b-'+i }"
-                        @click="toggleExpand('b-'+i)">
+                <ol class="boxes boxes-backward">
+                    <li class="box" v-for="(photo, i) in duplicated_photo_list" :key="'backward-'+i">
                         <img :src="photo" loading="lazy" />
                     </li>
                 </ol>
@@ -55,12 +47,8 @@ function toggleExpand(id) {
 
             <!-- 第三行 -->
             <div class="scroll-container">
-                <ol class="boxes boxes-forward" :class="{ paused: activeIndex !== null }">
-                    <li class="box" 
-                        v-for="(photo, i) in duplicated_photo_list" 
-                        :key="'f2-'+i"
-                        :class="{ active: activeIndex === 'f2-'+i }"
-                        @click="toggleExpand('f2-'+i)">
+                <ol class="boxes boxes-forward">
+                    <li class="box" v-for="(photo, i) in duplicated_photo_list" :key="'forward-2-'+i">
                         <img :src="photo" loading="lazy" />
                     </li>
                 </ol>
@@ -71,14 +59,13 @@ function toggleExpand(id) {
 
 <style scoped>
 /* ========================================================
-   修复 1：背景露白问题
-   改用 fixed 强行铺满屏幕
+   👇 修复了 .bg 的高度问题，并添加了标题样式
    ======================================================== */
 .bg { 
-    position: fixed; /* 改为 fixed */
-    top: 0; left: 0; /* 铺满 */
-    width: 100vw; 
-    height: 100vh; 
+    position: relative; 
+    width: 100%; 
+    /* ⚠️ 修复点：原来是 height: 100%，改为 min-height: 100vh 才能撑满手机屏幕 */
+    min-height: 100vh; 
     background-color: #FFF; 
     z-index: 0; 
     background: linear-gradient(-45deg, #ff7d996e, #ffc766, #5cb6ff, #ff6363); 
@@ -87,101 +74,94 @@ function toggleExpand(id) {
     display: flex; 
     justify-content: center; 
     align-items: center; 
-    overflow: hidden; /* 只有这里改了，防止滚动条 */
+    /* ⚠️ 新增：防止横向滚动条出现 */
+    overflow: hidden; 
 }
 
-.container { width: 100%; position: relative; z-index: 1; }
-@keyframes gradient { 0% { background-position: 0% 0%; } 50% { background-position: 100% 100%; } 100% { background-position: 0% 0%; } }
-
-.scroll-container { position: relative; margin-top: 20px; width: 100%; height: 250px; }
+/* ⚠️ 修改点：让容器垂直排列，这样标题才能在图片上面 */
+.container { 
+    width: 100%; 
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
 
 /* ========================================================
-   修复 2：布局错乱问题
-   width: max-content 确保图片排成一行，不换行
+   👇 新增：标题样式
    ======================================================== */
+.page-title {
+    font-size: 2rem;
+    color: #fff;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    font-weight: bold;
+    margin-bottom: 10px;
+    margin-top: 20px;
+    text-align: center;
+    letter-spacing: 2px;
+    /* 简单入场动画 */
+    animation: fadeInDown 1s ease-out;
+}
+
+@keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gradient { 0% { background-position: 0% 0%; } 50% { background-position: 100% 100%; } 100% { background-position: 0% 0%; } }
+
+.scroll-container { position: relative; margin-top: 20px; width: 100vw; height: 250px; }
+
 .boxes { 
     position: absolute; 
     display: flex; 
     height: 100%; 
-    width: max-content; /* 关键修复：防止换行 */
     animation: scroll linear infinite; 
     animation-duration: 50s; 
-    gap: 20px; 
+    gap: 20px ; 
     margin-top: 60px; 
     padding-left: 0; 
     padding-top: 20px;
     padding-bottom: 20px;
-    will-change: transform; /* 优化性能 */
 }
-
-/* 点击时暂停动画 */
-.boxes.paused { animation-play-state: paused; }
-
 .boxes-forward { animation-name: scrollForward; }
 .boxes-backward { animation-name: scrollBackward; }
 
-@keyframes scrollForward { 0% { transform: translateX(0); } 100% { transform: translateX(-25%); } }
-@keyframes scrollBackward { 0% { transform: translateX(-25%); } 100% { transform: translateX(0); } }
+@keyframes scrollForward { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+@keyframes scrollBackward { 0% { transform: translateX(-50%); } 100% { transform: translateX(0); } }
 
-/* ========================================================
-   修复 3：图片变成白块问题 & 保持倾斜
-   原先 perspective(100px) 太小导致 BUG，改为 300px (稍微大一点点，但仍然保持强烈倾斜)
-   ======================================================== */
-.box { 
-    list-style: none; 
-    position: relative; 
-    width: 200px; 
-    height: 200px; 
-    flex-shrink: 0; 
-    margin-right: 5px; 
-    border: none; 
-    border-radius: 15px; 
-    transition: all 0.5s ease; 
-    box-shadow: 0 0px 5px rgba(0, 0, 0, 0.5); 
-    opacity: 0.8; 
-    /* ⚠️ 修复点：这里原来是 100px，改成 300px 就能修好白块问题，同时保留倾斜 */
-    transform: perspective(300px) rotateY(-15deg); 
-}
-
-.box img { width: 100%; height: 100%; object-fit: cover; object-position: center; border-radius: 15px; transition: all 0.8s ease; pointer-events: none; }
-
-/* 电脑端 Hover (保留原样) */
+.box { list-style: none; position: relative; width: 200px; height: 200px; flex-shrink: 0; margin-right: 5px; border: none; border-radius: 15px; transition: all 0.5s ease; box-shadow: 0 0px 5px rgba(0, 0, 0, 0.5); opacity: 0.8; transform: perspective(100px) rotateY(-15deg); }
+.box img { width: 100%; height: 100%; object-fit: cover; object-position: center; border-radius: 15px; transition: all 0.8s ease; }
 .box:hover { opacity: 1; z-index: 1; width: 300px; transition: all 0.5s ease; transform: scale(1.1); }
 
-/* 反向列的倾斜 (保留原样，同样调整透视) */
-.boxes-backward .box { transform: perspective(300px) rotateY(15deg); }
+.boxes:hover { animation-play-state: paused; }
+
+.boxes-backward .box { transform: perspective(100px) rotateY(15deg); }
 .boxes-backward .box:hover { transform: scale(1.1); }
 
-/* ========================================================
-   修复 4：手机点击放大 (新增 .active 状态)
-   模拟你原来想要的“放大效果”
-   ======================================================== */
-.box.active {
-    opacity: 1 !important;
-    z-index: 100 !important;
-    width: 300px !important; /* 强制变宽 */
-    /* 保持放大，这里我去掉了 rotateY(0)，如果你想放大时也倾斜，就保留原样 */
-    /* 但根据你原本的 mobile 代码，你似乎希望放大时看清楚（rotateY(0)）*/
-    transform: scale(1.1) !important; 
-    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+/* --- 平板样式 --- */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .scroll-container { height: 200px; margin-top: 15px; }
+    .boxes { margin-top: 30px; gap: 15px; }
+    .box { width: 160px; height: 160px; }
+    .box:hover { width: 240px; }
 }
 
-/* --- 手机样式适配 (保留你的代码逻辑) --- */
+/* --- 手机样式 --- */
 @media (max-width: 768px) {
     .container { padding-top: 0; }
+    /* 调整手机上标题大小 */
+    .page-title { font-size: 1.5rem; margin-top: 30px; margin-bottom: 0; } 
     .scroll-container { height: 150px; margin-top: 10px; }
     .boxes { margin-top: 15px; gap: 10px; }
     .box { width: 120px; height: 120px; }
-
-    /* 手机上被点击激活时的样式 */
-    .box.active {
-        width: 220px !important;
-        transform: scale(1.1) rotateY(0deg) !important; /* 放大时回正，方便看图 */
-    }
+    .box:hover { width: 200px; transform: scale(1.05) rotateY(0); }
+    .boxes-backward .box:hover { transform: scale(1.05) rotateY(0); }
 }
 
 /* --- 电脑端样式优化 --- */
 @media (min-width: 1025px) {
+    /* 这里保持原样，但注意 container 现在是 column 布局 */
     .container { width: 33.33vw; min-width: 500px; margin: 0 auto; }
     .scroll-container { width: 100%; }
 }
