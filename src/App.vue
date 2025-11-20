@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 
 // ========================================================
-// 图片与缓存逻辑 (保持不变)
+// 1. 图片与缓存逻辑 (保持不变，性能最好)
 // ========================================================
 const total_photos = 15; 
 const raw_photo_urls = []; 
@@ -57,11 +57,9 @@ const duplicated_photo_list = computed(() => {
         </transition>
 
         <!-- 
-           👇 核心修改：
-           移除 v-show，改用 opacity 避免布局跳动。
-           container 负责垂直居中内容。
+           container 负责垂直居中内容
         -->
-        <div class="container" :style="{ opacity: isLoading ? 0 : 1 }">
+        <div class="container" v-show="!isLoading">
             
             <div class="title-wrapper">
                 <h1 class="page-title">阿祖喵的秘密基地</h1>
@@ -72,7 +70,7 @@ const duplicated_photo_list = computed(() => {
             <div class="scroll-wrapper">
                 <ol class="boxes boxes-forward">
                     <li class="box" v-for="(photo, i) in duplicated_photo_list" :key="'f-'+i">
-                        <img :src="photo" draggable="false" /> <!-- 禁止图片拖拽，优化点击体验 -->
+                        <img :src="photo" draggable="false" />
                     </li>
                 </ol>
             </div>
@@ -108,7 +106,7 @@ const duplicated_photo_list = computed(() => {
     min-height: 100vh; /* 强制占满屏幕高度 */
     display: flex;     /* 启用 Flex 布局 */
     justify-content: center; /* 水平居中 */
-    align-items: center;     /* 🚀 垂直居中：解决电脑版往上飘的问题 */
+    align-items: center;     /* 🚀 垂直居中：内容不再往上飘 */
     overflow-x: hidden;      /* 防止页面出现横向滚动条 */
     padding-bottom: 20px;
 }
@@ -119,25 +117,22 @@ const duplicated_photo_list = computed(() => {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    transition: opacity 0.5s ease;
-    /* 加上一点 z-index 确保在背景之上 */
     z-index: 10;
 }
 
 /* ========================================================
-   2. 🚀 核心修复：全屏穿透 + 点击暂停
+   2. 滚动容器 (保持全屏穿透修复)
    ======================================================== */
 .scroll-wrapper { 
     position: relative; 
     height: 220px; 
-    margin-top: 15px;
+    margin-top: 20px;
     
     /* 👇 暴力全屏方案：无视父容器宽度，强制撑满视口 */
     width: 100vw; 
     left: 50%; 
     margin-left: -50vw; 
     
-    /* 允许子元素溢出，防止图片被切掉 (消除空气墙) */
     overflow: visible; 
 }
 
@@ -149,28 +144,25 @@ const duplicated_photo_list = computed(() => {
     align-items: center;
     padding-left: 0; 
     gap: 20px; 
-    
-    /* 动画设置 */
     animation: scroll linear infinite; 
-    animation-duration: 60s; /* 稍微调慢一点，看起来更优雅 */
+    animation-duration: 60s; 
     will-change: transform;
 }
 
-/* 🚀 交互修复：鼠标悬停 OR 手指按住时，停止动画 */
+/* 鼠标悬停/按住时暂停 */
 .boxes:hover, 
 .boxes:active { 
     animation-play-state: paused; 
-    z-index: 100; /* 按住时层级提高 */
+    z-index: 100; 
 }
 
 /* 动画定义 */
 .boxes-forward { animation-name: scrollForward; }
 .boxes-backward { animation-name: scrollBackward; }
 
-/* 使用 transform 确保平滑 */
 @keyframes scrollForward { 
     0% { transform: translate3d(0, 0, 0); } 
-    100% { transform: translate3d(-33.33%, 0, 0); } /* 移动 1/3 (因为复制了3份) */
+    100% { transform: translate3d(-33.33%, 0, 0); } 
 }
 @keyframes scrollBackward { 
     0% { transform: translate3d(-33.33%, 0, 0); } 
@@ -178,7 +170,7 @@ const duplicated_photo_list = computed(() => {
 }
 
 /* ========================================================
-   3. 图片与卡片样式
+   3. 图片卡片 - ⚠️ 已完全恢复原本的倾斜设计
    ======================================================== */
 .box { 
     list-style: none; 
@@ -187,13 +179,13 @@ const duplicated_photo_list = computed(() => {
     height: 200px; 
     flex-shrink: 0; 
     border-radius: 15px; 
-    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); /* 优化回弹效果 */
+    transition: all 0.5s ease; 
     
-    /* 初始状态：轻微 3D 倾斜 */
-    transform: perspective(500px) rotateY(-15deg) scale(0.9);
-    opacity: 0.85;
+    /* 👇 恢复原本的强烈透视感 */
+    opacity: 0.8; 
+    transform: perspective(100px) rotateY(-15deg); 
     
-    box-shadow: 5px 5px 15px rgba(0,0,0,0.1);
+    box-shadow: 0 0px 5px rgba(0, 0, 0, 0.5); 
 }
 
 .box img { 
@@ -202,24 +194,34 @@ const duplicated_photo_list = computed(() => {
     object-fit: cover; 
     border-radius: 15px; 
     display: block;
-    /* 防止手机上长按选中图片 */
+    transition: all 0.8s ease;
     user-select: none; 
     pointer-events: none; 
 }
 
-/* 选中/悬停状态 */
+/* 
+   悬停/点击状态 
+   恢复原本逻辑：hover 时变大、变正、置顶
+*/
 .box:hover, .box:active { 
     opacity: 1; 
     z-index: 200; 
-    /* 放大并摆正 */
-    transform: perspective(500px) rotateY(0deg) scale(1.15); 
+    width: 300px; /* 原本的宽度变化 */
+    transition: all 0.5s ease; 
+    transform: scale(1.1) rotateY(0deg); /* 必须重置旋转，否则是歪的 */
     box-shadow: 0 15px 35px rgba(0,0,0,0.3); 
-    border: 2px solid rgba(255,255,255,0.8); /* 加个白边框更醒目 */
 }
 
-/* 反向滚动的行，初始角度相反 */
-.boxes-backward .box { transform: perspective(500px) rotateY(15deg) scale(0.9); }
-.boxes-backward .box:hover, .boxes-backward .box:active { transform: perspective(500px) rotateY(0deg) scale(1.15); }
+/* 
+   反向滚动行的倾斜方向 
+   ⚠️ 恢复原本设计 
+*/
+.boxes-backward .box { 
+    transform: perspective(100px) rotateY(15deg); 
+}
+.boxes-backward .box:hover, .boxes-backward .box:active { 
+    transform: scale(1.1) rotateY(0deg); 
+}
 
 /* ========================================================
    4. 标题与其他
@@ -234,7 +236,7 @@ const duplicated_photo_list = computed(() => {
 .page-title {
     font-family: system-ui, -apple-system, sans-serif;
     font-weight: 900;
-    font-size: clamp(2rem, 5vw, 3.5rem); /* 响应式字体大小 */
+    font-size: clamp(2rem, 5vw, 3.5rem);
     color: #ffffff;
     text-shadow: 3px 3px 0px #ff9a9e, 6px 6px 0px #fad0c4;
     margin: 0;
@@ -280,13 +282,21 @@ const duplicated_photo_list = computed(() => {
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
 /* ========================================================
-   5. 手机适配微调
+   5. 手机适配 (恢复你原来的参数)
    ======================================================== */
 @media (max-width: 768px) {
     .scroll-wrapper { height: 160px; margin-top: 10px; }
     .boxes { gap: 10px; }
-    .box { width: 130px; height: 130px; }
-    .box:hover, .box:active { transform: scale(1.1) rotateY(0); width: 160px; }
+    .box { width: 120px; height: 120px; } /* 恢复原本大小 */
+    
+    /* 手机上 hover 的效果 */
+    .box:hover, .box:active { 
+        width: 200px; 
+        transform: scale(1.05) rotateY(0); 
+    }
+    .boxes-backward .box:hover, .boxes-backward .box:active { 
+        transform: scale(1.05) rotateY(0); 
+    }
 }
 </style>
 
